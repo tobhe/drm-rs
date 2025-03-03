@@ -231,6 +231,40 @@ fn devname(dev: dev_t) -> Option<String> {
     Some(String::from_utf8(dev_name).expect("Returned device name is not valid utf8"))
 }
 
+#[cfg(target_os = "openbsd")]
+use std::sync::Mutex;
+
+#[cfg(target_os = "openbsd")]
+static DEVNAME_LOCK: Mutex<()> = Mutex::new(());
+
+#[cfg(target_os = "openbsd")]
+fn devname(dev: dev_t) -> Option<String> {
+    use std::ffi::CStr;
+
+    let _lock = DEVNAME_LOCK.lock().unwrap();
+    let buf = unsafe {
+        libc::devname(
+            dev,
+            libc::S_IFCHR, // Must be S_IFCHR or S_IFBLK
+        )
+    };
+
+    if buf.is_null() {
+        return None;
+    }
+
+    let dev_str =
+        unsafe { CStr::from_ptr(buf).to_str() }.expect("Returned device name is not valid utf8");
+
+    // If no device matches the specified values, or no information is
+    // available, a pointer to the string "??" is returned.
+    if dev_str == "??" {
+        return None;
+    }
+
+    Some(dev_str.to_owned())
+}
+
 /// Returns if the given device by major:minor pair is a DRM device.
 #[cfg(target_os = "linux")]
 pub fn is_device_drm(dev: dev_t) -> bool {
@@ -241,7 +275,7 @@ pub fn is_device_drm(dev: dev_t) -> bool {
 }
 
 /// Returns if the given device by major:minor pair is a DRM device.
-#[cfg(target_os = "freebsd")]
+#[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
 pub fn is_device_drm(dev: dev_t) -> bool {
     devname(dev).map_or(false, |dev_name| {
         dev_name.starts_with("drm/")
@@ -252,7 +286,7 @@ pub fn is_device_drm(dev: dev_t) -> bool {
 }
 
 /// Returns if the given device by major:minor pair is a DRM device.
-#[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
+#[cfg(not(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd")))]
 pub fn is_device_drm(dev: dev_t) -> bool {
     major(dev) == DRM_MAJOR
 }
@@ -313,7 +347,7 @@ pub fn dev_path(dev: dev_t, ty: NodeType) -> io::Result<PathBuf> {
 }
 
 /// Returns the path of a specific type of node from the DRM device described by major and minor device numbers.
-#[cfg(target_os = "freebsd")]
+#[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
 pub fn dev_path(dev: dev_t, ty: NodeType) -> io::Result<PathBuf> {
     // Based on libdrm `drmGetMinorNameForFD`. Should be updated if the code
     // there is replaced with anything more sensible...
@@ -351,7 +385,7 @@ pub fn dev_path(dev: dev_t, ty: NodeType) -> io::Result<PathBuf> {
 }
 
 /// Returns the path of a specific type of node from the DRM device described by major and minor device numbers.
-#[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
+#[cfg(not(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd")))]
 pub fn dev_path(dev: dev_t, ty: NodeType) -> io::Result<PathBuf> {
     use std::io::ErrorKind;
 
