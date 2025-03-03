@@ -19,6 +19,9 @@ rustix = { version = "0.38.22", features = ["mm", "fs"] }
 [target.'cfg(target_os = "freebsd")'.dependencies]
 libc = "0.2"
 
+[target.'cfg(target_os = "openbsd")'.dependencies]
+libc = "0.2.171" # XXX Not yet
+
 [dev-dependencies]
 image = { version = "0.24", default-features = false, features = ["png"] }
 rustix = { version = "0.38.22", features = ["event", "mm"] }
